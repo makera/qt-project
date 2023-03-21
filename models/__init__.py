@@ -10,6 +10,9 @@ from pathlib import Path
 from sqlite3 import Row
 from typing import TypeVar, Type
 
+from PyQt5.QtCore import QFile
+from PyQt5.QtGui import QImage
+
 from db import get_db
 from PIL import Image as Img
 
@@ -110,21 +113,35 @@ class BaseModel(ABC):
             setattr(self, col, res[col])
         cur.close()
         for filename, file in self._files:
-            file: tuple
             self._upload_folder.mkdir(parents=True, exist_ok=True)
-            with Img.open(file[0], mode='r') as im:
-                width, height = im.size
-                # Setting the points for cropped image
-                left = max(0, width // 2 - min(width, height) // 2)
-                top = max(0, height // 2 - min(width, height) // 2)
-                right = min(width, width // 2 + min(width, height) // 2)
-                bottom = min(height, height // 2 + min(width, height) // 2)
-                # Cropped image of above dimension
-                # (It will not change original image)
-                im1 = im.crop((left, top, right, bottom))
-                newsize = (200, 200)
-                im1 = im1.resize(newsize)
-                im1.save(filename)
+            if isinstance(file, tuple):
+                with Img.open(file[0], mode='r') as im:
+                    width, height = im.size
+                    # Setting the points for cropped image
+                    left = max(0, width // 2 - min(width, height) // 2)
+                    top = max(0, height // 2 - min(width, height) // 2)
+                    right = min(width, width // 2 + min(width, height) // 2)
+                    bottom = min(height, height // 2 + min(width, height) // 2)
+                    # Cropped image of above dimension
+                    # (It will not change original image)
+                    im1 = im.crop((left, top, right, bottom))
+                    newsize = (200, 200)
+                    im1 = im1.resize(newsize)
+                    im1.save(filename)
+            elif isinstance(file, QImage):
+                with Img.fromqimage(file) as im:
+                    width, height = im.size
+                    # Setting the points for cropped image
+                    left = max(0, width // 2 - min(width, height) // 2)
+                    top = max(0, height // 2 - min(width, height) // 2)
+                    right = min(width, width // 2 + min(width, height) // 2)
+                    bottom = min(height, height // 2 + min(width, height) // 2)
+                    # Cropped image of above dimension
+                    # (It will not change original image)
+                    im1 = im.crop((left, top, right, bottom))
+                    newsize = (200, 200)
+                    im1 = im1.resize(newsize)
+                    im1.save(filename)
         del self._files
         return self
 
@@ -136,6 +153,12 @@ class BaseModel(ABC):
                 if isinstance(file, tuple):
                     filename = self._upload_folder / f'{str(uuid.uuid4())[:6]}_{Path(file[0]).name}'
                     self._files.append((filename, file))
+                    setattr(self, field.name, filename)
+                elif isinstance(file, QFile):
+                    filename = self._upload_folder / f'{str(uuid.uuid4())[:6]}_{Path(file.fileName()).name}'
+                    file.setOpenMode(QFile.ReadOnly)
+                    self._files.append((filename, QImage.fromData(file.readAll())))
+                    file.close()
                     setattr(self, field.name, filename)
         return True
 

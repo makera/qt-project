@@ -1,6 +1,9 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow
 
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QMainWindow, QListWidgetItem, QListWidget
+
+from init import CATEGORIES
 from models.category import Category
 from models.order import Order, OrderProduct
 from models.product import Product
@@ -28,6 +31,11 @@ class MyWindow(Ui_MainWindow, QMainWindow):
         self.addCategoryMenu.triggered.connect(self.open_category_dialog)
         self.addProductMenu.triggered.connect(self.open_product_dialog)
         self.toCategoriesButton.clicked.connect(self.setup_categories)
+        self.initTestData.triggered.connect(self.init_test_data)
+        self.orderList.itemDoubleClicked.connect(self.remove_from_cart)
+        self.orderList.model().rowsInserted.connect(self.calc_total)
+        self.orderList.model().rowsRemoved.connect(self.calc_total)
+        self.submit.clicked.connect(self.submit_order)
 
     def open_category_dialog(self):
         dlg = CategoryDialog(self)
@@ -42,11 +50,12 @@ class MyWindow(Ui_MainWindow, QMainWindow):
         dlg.exec()
 
     def setup_categories(self):
+        """ Выводим список категорий из БД """
         piles = self.pilesGrid
         for i in reversed(range(piles.count())):
             piles.itemAt(i).widget().setParent(None)
         categories = Category.fetch_all()
-        for i, category in {i: categories[i] for i in range(len(categories))}.items():
+        for i, category in enumerate(categories):
             row = i // 3
             col = i % 3
             pile = ChoicePile(category.label, category.image, category)
@@ -56,20 +65,52 @@ class MyWindow(Ui_MainWindow, QMainWindow):
         self.toCategoriesButton.setEnabled(False)
 
     def setup_products(self):
+        """ Выводим список товаров для категории из БД """
         piles = self.pilesGrid
         for i in reversed(range(piles.count())):
             piles.itemAt(i).widget().setParent(None)
         for widget in piles.children():
             piles.removeWidget(widget)
         products = Product.fetch_all()
-        for i, product in {i: products[i] for i in range(len(products)) if
-                           products[i].category.id == self.sender().obj.id}.items():
+        for i, product in enumerate(product for product in products if
+                                    product.category.id == self.sender().obj.id):
             row = i // 3
             col = i % 3
             pile = ChoicePile(product.name, product.image, product)
             piles.addWidget(pile, row, col)
             pile.show()
+            pile.clicked.connect(self.add_to_cart)
         self.toCategoriesButton.setEnabled(True)
+
+    def add_to_cart(self):
+        product: Product = self.sender().obj
+        list_item = QListWidgetItem(QIcon(product.image), f'{product.name} x {product.price}')
+        list_item.obj = product
+        self.orderList.addItem(list_item)
+
+    def remove_from_cart(self, item):
+        self.orderList.takeItem(self.orderList.indexFromItem(item).row())
+
+    def calc_total(self):
+        """ Подсчитываем и выводим итоговую сумму заказа """
+        qlist: QListWidget = self.orderList
+        total = sum([qlist.item(i).obj.price for i in range(qlist.count())])
+        self.totalSum.setText(str(total))
+
+    def init_test_data(self):
+        """ Добавляем тестовые данные """
+        for category, products in CATEGORIES:
+            category.save()
+            for product in products:
+                product.category = category
+                product.save()
+        self.setup_categories()
+
+    def submit_order(self):
+        """ Завершаем выполнения заказа """
+        self.orderList.clear()
+        self.calc_total()
+        # TODO: Сделать сохранение заказа
 
 
 if __name__ == '__main__':

@@ -20,6 +20,7 @@ class ChoicePile(Ui_Pile, QWidget):
                         background-repeat: no-repeat;
                         background-position: center;'''
         self.imageFrame.setStyleSheet(stylesheet)
+        self.pileTitle.setStyleSheet('background: #1212ce; color: #ffffff;')
 
     def mousePressEvent(self, a0):
         self.clicked.emit()
